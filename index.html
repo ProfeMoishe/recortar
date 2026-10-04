@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel Art Cropper - BMP</title>
+<style>
+    :root {
+        --bg: #1e1e2e;
+        --panel: #2a2a3e;
+        --accent: #7aa2f7;
+        --accent-hover: #9bb5ff;
+        --text: #e0e0e0;
+        --border: #444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+    }
+    h1 {
+        color: var(--accent);
+        margin-bottom: 20px;
+        font-size: 1.6rem;
+        text-align: center;
+    }
+    .container {
+        width: 100%;
+        max-width: 900px;
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 15px;
+        align-items: center;
+    }
+    button, .file-btn {
+        background: var(--accent);
+        color: #111;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        font-size: 0.9rem;
+    }
+    button:hover, .file-btn:hover { background: var(--accent-hover); }
+    button:active { transform: scale(0.97); }
+    button:disabled {
+        background: #555;
+        color: #888;
+        cursor: not-allowed;
+    }
+    .file-btn { display: inline-block; }
+    input[type="file"] { display: none; }
+
+    .mode-buttons { display: flex; gap: 8px; }
+    .mode-btn.active {
+        background: #ff9e64;
+        color: #111;
+        box-shadow: 0 0 0 2px #fff inset;
+    }
+
+    .info {
+        background: #1a1a28;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        margin-bottom: 15px;
+        border-left: 3px solid var(--accent);
+        line-height: 1.5;
+    }
+    .info span { color: var(--accent); font-weight: 600; }
+
+    .canvas-wrapper {
+        position: relative;
+        overflow: auto;
+        max-height: 500px;
+        border: 2px dashed var(--border);
+        border-radius: 8px;
+        background: #111;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 10px;
+        min-height: 150px;
+    }
+    #canvasContainer {
+        position: relative;
+        display: inline-block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+    }
+    #mainCanvas {
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        cursor: crosshair;
+    }
+    #selectionBox {
+        position: absolute;
+        border: 2px solid #ff9e64;
+        box-shadow: 0 0 0 2px rgba(0,0,0,0.6), 0 0 12px rgba(255,158,100,0.8);
+        pointer-events: none;
+        box-sizing: border-box;
+        background: rgba(255,158,100,0.15);
+    }
+    .placeholder {
+        color: #666;
+        font-style: italic;
+        padding: 40px;
+        text-align: center;
+    }
+    .zoom-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 12px 0;
+        font-size: 0.85rem;
+    }
+    input[type="range"] { flex: 1; accent-color: var(--accent); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+    .hint {
+        font-size: 0.78rem;
+        color: #888;
+        margin-top: 10px;
+        line-height: 1.5;
+    }
+    .hint kbd {
+        background: #333;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #555;
+        font-size: 0.75rem;
+    }
+</style>
+</head>
+<body>
+
+<h1>🎨 Pixel Art Cropper → BMP</h1>
+
+<div class="container">
+    <div class="controls">
+        <label class="file-btn">
+            📁 Cargar Imagen
+            <input type="file" id="fileInput" accept="image/*">
+        </label>
+
+        <div class="mode-buttons">
+            <button class="mode-btn" data-w="16" data-h="16" id="btn16">16 × 16</button>
+            <button class="mode-btn" data-w="15" data-h="25" id="btn15">15 × 25</button>
+        </div>
+
+        <button id="downloadBtn" disabled>💾 Guardar BMP</button>
+        <button id="resetBtn" disabled>🔄 Reiniciar</button>
+    </div>
+
+    <div class="info" id="info">
+        Sin imagen cargada.
+    </div>
+
+    <div class="zoom-row">
+        <label for="zoom">🔍 Zoom:</label>
+        <input type="range" id="zoom" min="1" max="16" value="4" step="1">
+        <span id="zoomLabel">4x</span>
+    </div>
+
+    <div class="canvas-wrapper" id="canvasWrapper">
+        <div class="placeholder" id="placeholder">Carga una imagen para comenzar</div>
+        <div id="canvasContainer" style="display:none;">
+            <canvas id="mainCanvas"></canvas>
+            <div id="selectionBox"></div>
+        </div>
+    </div>
+
+    <div class="hint">
+        💡 <strong>Controles:</strong> Haz clic en la imagen para mover el marco · Usa las flechas <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> para mover 1px · Mantén <kbd>Shift</kbd> + flechas para mover 10px · También puedes arrastrar el marco con el mouse.
+    </div>
+</div>
+
+<script>
+(function() {
+    // ====== Referencias DOM ======
+    const fileInput = document.getElementById('fileInput');
+    const info = document.getElementById('info');
+    const placeholder = document.getElementById('placeholder');
+    const canvasContainer = document.getElementById('canvasContainer');
+    const mainCanvas = document.getElementById('mainCanvas');
+    const ctx = mainCanvas.getContext('2d');
+    const selectionBox = document.getElementById('selectionBox');
+    const btn16 = document.getElementById('btn16');
+    const btn15 = document.getElementById('btn15');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const zoomSlider = document.getElementById('zoom');
+    const zoomLabel = document.getElementById('zoomLabel');
+    const canvasWrapper = document.getElementById('canvasWrapper');
+
+    // ====== Estado ======
+    let originalImage = null;        // Image object
+    let originalWidth = 0;
+    let originalHeight = 0;
+    let cropW = 16;
+    let cropH = 16;
+    let selX = 0;                    // posición en píxeles de la imagen original
+    let selY = 0;
+    let zoom = 4;
+    let isDragging = false;
+    let dragStartX = 0, dragStartY = 0;
+    let dragStartSelX = 0, dragStartSelY = 0;
+
+    // ====== Carga de imagen ======
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const img = new Image();
+            img.onload = () => {
+                originalImage = img;
+                originalWidth = img.naturalWidth;
+                originalHeight = img.naturalHeight;
+                mainCanvas.width = originalWidth;
+                mainCanvas.height = originalHeight;
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(img, 0, 0);
+                placeholder.style.display = 'none';
+                canvasContainer.style.display = 'inline-block';
+                downloadBtn.disabled = false;
+                resetBtn.disabled = false;
+
+                // Ajustar selección inicial al centro
+                selX = Math.max(0, Math.floor((originalWidth - cropW) / 2));
+                selY = Math.max(0, Math.floor((originalHeight - cropH) / 2));
+
+                updateInfo(file);
+                updateSelectionBox();
+                applyZoom();
+            };
+            img.onerror = () => alert('No se pudo cargar la imagen.');
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // ====== Información ======
+    function updateInfo(file) {
+        const kb = file ? (file.size / 1024).toFixed(2) : '—';
+        const type = file ? (file.type || 'desconocido') : '—';
+        info.innerHTML = `
+            📐 <span>${originalWidth}</span> × <span>${originalHeight}</span> px &nbsp;|&nbsp;
+            📄 Tipo: <span>${type}</span> &nbsp;|&nbsp;
+            💾 Tamaño: <span>${kb} KB</span> &nbsp;|&nbsp;
+            ✂️ Recorte: <span>${cropW} × ${cropH}</span> px &nbsp;|&nbsp;
+            📍 Posición: <span>(${selX}, ${selY})</span>
+        `;
+    }
+
+    // ====== Modos de recorte ======
+    btn16.addEventListener('click', () => setMode(16, 16));
+    btn15.addEventListener('click', () => setMode(15, 25));
+
+    function setMode(w, h) {
+        cropW = w;
+        cropH = h;
+        // Ajustar si la selección se sale
+        selX = Math.min(selX, Math.max(0, originalWidth - cropW));
+        selY = Math.min(selY, Math.max(0, originalHeight - cropH));
+        if (selX < 0) selX = 0;
+        if (selY < 0) selY = 0;
+        updateSelectionBox();
+        updateInfo(fileInput.files[0]);
+        // Resaltar botón activo
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        if (w === 16 && h === 16) btn16.classList.add('active');
+        else if (w === 15 && h === 25) btn15.classList.add('active');
+    }
+
+    // ====== Zoom ======
+    zoomSlider.addEventListener('input', () => {
+        zoom = parseInt(zoomSlider.value);
+        zoomLabel.textContent = zoom + 'x';
+        applyZoom();
+    });
+
+    function applyZoom() {
+        if (!originalImage) return;
+        mainCanvas.style.width = (originalWidth * zoom) + 'px';
+        mainCanvas.style.height = (originalHeight * zoom) + 'px';
+        // El contenedor debe reflejar el tamaño escalado para el posicionamiento del marco
+        canvasContainer.style.width = (originalWidth * zoom) + 'px';
+        canvasContainer.style.height = (originalHeight * zoom) + 'px';
+        updateSelectionBox();
+    }
+
+    // ====== Actualizar marco de selección ======
+    function updateSelectionBox() {
+        if (!originalImage) return;
+        // Convertir coordenadas de imagen a pantalla
+        const left = selX * zoom;
+        const top = selY * zoom;
+        const w = cropW * zoom;
+        const h = cropH * zoom;
+        selectionBox.style.left = left + 'px';
+        selectionBox.style.top = top + 'px';
+        selectionBox.style.width = w + 'px';
+        selectionBox.style.height = h + 'px';
+        // Actualizar info de posición
+        updateInfo(fileInput.files[0]);
+    }
+
+    // ====== Click en el canvas para mover selección ======
+    mainCanvas.addEventListener('click', (e) => {
+        if (!originalImage || isDragging) return;
+        const rect = mainCanvas.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+        // Convertir a píxeles de imagen
+        let imgX = Math.floor(clickX / zoom);
+        let imgY = Math.floor(clickY / zoom);
+        // Centrar el recorte en el click
+        selX = imgX - Math.floor(cropW / 2);
+        selY = imgY - Math.floor(cropH / 2);
+        clampSelection();
+        updateSelectionBox();
+    });
+
+    // ====== Arrastrar el marco ======
+    selectionBox.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        dragStartSelX = selX;
+        dragStartSelY = selY;
+        document.body.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging || !originalImage) return;
+        const dx = (e.clientX - dragStartX) / zoom;
+        const dy = (e.clientY - dragStartY) / zoom;
+        selX = Math.round(dragStartSelX + dx);
+        selY = Math.round(dragStartSelY + dy);
+        clampSelection();
+        updateSelectionBox();
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.cursor = '';
+        }
+    });
+
+    // ====== Teclado ======
+    document.addEventListener('keydown', (e) => {
+        if (!originalImage) return;
+        // Solo si no se está escribiendo en un input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        const step = e.shiftKey ? 10 : 1;
+        let moved = false;
+        switch (e.key) {
+            case 'ArrowLeft':  selX -= step; moved = true; break;
+            case 'ArrowRight': selX += step; moved = true; break;
+            case 'ArrowUp':    selY -= step; moved = true; break;
+            case 'ArrowDown':  selY += step; moved = true; break;
+        }
+        if (moved) {
+            e.preventDefault();
+            clampSelection();
+            updateSelectionBox();
+        }
+    });
+
+    function clampSelection() {
+        selX = Math.max(0, Math.min(selX, originalWidth - cropW));
+        selY = Math.max(0, Math.min(selY, originalHeight - cropH));
+    }
+
+    // ====== Reset ======
+    resetBtn.addEventListener('click', () => {
+        if (!originalImage) return;
+        selX = Math.max(0, Math.floor((originalWidth - cropW) / 2));
+        selY = Math.max(0, Math.floor((originalHeight - cropH) / 2));
+        updateSelectionBox();
+    });
+
+    // ====== Generar BMP ======
+    downloadBtn.addEventListener('click', () => {
+        if (!originalImage) return;
+        // Crear canvas temporal del tamaño del recorte
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = cropW;
+        tmpCanvas.height = cropH;
+        const tmpCtx = tmpCanvas.getContext('2d');
+        tmpCtx.imageSmoothingEnabled = false;
+        // Dibujar la porción seleccionada
+        tmpCtx.drawImage(
+            originalImage,
+            selX, selY, cropW, cropH,
+            0, 0, cropW, cropH
+        );
+        // Obtener datos de imagen
+        const imgData = tmpCtx.getImageData(0, 0, cropW, cropH);
+        const bmpBuffer = createBMP(imgData, cropW, cropH);
+        const blob = new Blob([bmpBuffer], { type: 'image/bmp' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const modeName = `${cropW}x${cropH}`;
+        a.href = url;
+        a.download = `recorte_${modeName}_${selX}-${selY}.bmp`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    /**
+     * Crea un archivo BMP de 24 bits a partir de ImageData.
+     * Nota: BMP almacena las filas de abajo hacia arriba (bottom-up).
+     * Cada fila debe estar alineada a 4 bytes.
+     */
+    function createBMP(imageData, w, h) {
+        const data = imageData.data;
+        // Tamaño de fila en bytes (BGR, 3 bytes por pixel)
+        const rowSize = Math.floor((24 * w + 31) / 32) * 4; // alineado a 4 bytes
+        const pixelArraySize = rowSize * h;
+        const fileHeaderSize = 14;
+        const infoHeaderSize = 40;
+        const fileSize = fileHeaderSize + infoHeaderSize + pixelArraySize;
+
+        const buffer = new ArrayBuffer(fileSize);
+        const view = new DataView(buffer);
+
+        // ---- BITMAPFILEHEADER (14 bytes) ----
+        view.setUint8(0, 0x42); // 'B'
+        view.setUint8(1, 0x4D); // 'M'
+        view.setUint32(2, fileSize, true);        // Tamaño total
+        view.setUint16(6, 0, true);               // Reservado
+        view.setUint16(8, 0, true);               // Reservado
+        view.setUint32(10, fileHeaderSize + infoHeaderSize, true); // Offset a datos
+
+        // ---- BITMAPINFOHEADER (40 bytes) ----
+        view.setUint32(14, infoHeaderSize, true); // Tamaño de este header
+        view.setInt32(18, w, true);               // Ancho
+        view.setInt32(22, h, true);               // Alto (positivo = bottom-up)
+        view.setUint16(26, 1, true);              // Planos
+        view.setUint16(28, 24, true);             // Bits por pixel
+        view.setUint32(30, 0, true);              // Compresión (BI_RGB)
+        view.setUint32(34, pixelArraySize, true); // Tamaño de datos
+        view.setInt32(38, 2835, true);            // Resolución X (72 DPI)
+        view.setInt32(42, 2835, true);            // Resolución Y
+        view.setUint32(46, 0, true);              // Colores en paleta
+        view.setUint32(50, 0, true);              // Colores importantes
+
+        // ---- Datos de píxeles ----
+        const pixelOffset = fileHeaderSize + infoHeaderSize;
+        for (let y = 0; y < h; y++) {
+            // BMP va de abajo hacia arriba
+            const srcY = h - 1 - y;
+            let rowOffset = pixelOffset + y * rowSize;
+            for (let x = 0; x < w; x++) {
+                const i = (srcY * w + x) * 4;
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                // BMP usa BGR
+                view.setUint8(rowOffset++, b);
+                view.setUint8(rowOffset++, g);
+                view.setUint8(rowOffset++, r);
+            }
+            // Relleno de la fila hasta múltiplo de 4
+            const padding = rowSize - (w * 3);
+            for (let p = 0; p < padding; p++) {
+                view.setUint8(rowOffset++, 0);
+            }
+        }
+
+        return buffer;
+    }
+
+    // ====== Inicialización ======
+    setMode(16, 16);
+})();
+</script>
+</body>
+</html>
